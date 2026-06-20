@@ -1,0 +1,25 @@
+# Upstream clones (binaries + own git history) — not our code
+fabric-samples/
+fabric/
+install-fabric.sh
+
+# Local tooling config
+.claude/
+
+# Vendored Go deps — regenerate with: cd chaincode/produce-traceability && go mod vendor
+chaincode/produce-traceability/vendor/
+
+# Secrets: enrolled identities contain PRIVATE KEYS — never commit
+app/server/wallet/
+
+# Node
+**/node_modules/
+app/web/dist/
+npm-debug.log*
+
+# SDD scratch ledger
+.superpowers/
+
+# OS / editor
+.DS_Store
+*.log
