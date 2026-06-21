@@ -36,12 +36,25 @@ LOT="LOT-SR-${STAMP}"
 LOT_BAD="LOT-SR-${STAMP}-B"
 
 invoke() {
-  peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile "$ORDERER_CA" \
-    -C mychannel -n produce \
-    --peerAddresses localhost:7051 --tlsRootCertFiles "$ORG1_CA" \
-    --peerAddresses localhost:9051 --tlsRootCertFiles "$ORG2_CA" \
-    -c "$1" >/dev/null 2>&1
-  sleep 2
+  # --waitForEvent: chờ ĐÚNG đến khi giao dịch được commit (thay vì chỉ gửi tới
+  #   orderer rồi trả về ngay — đó là lý do bản cũ phải "sleep 2" và vẫn dễ lỗi
+  #   "lot does not exist" khi bước sau đọc trước lúc bước trước kịp commit).
+  # --waitForEventTimeout 30s: nếu orderer BFT bị kẹt, lệnh fail nhanh kèm thông
+  #   báo thay vì treo vô hạn. Lỗi được in ra và dừng script (không bị che mã thoát).
+  local out
+  if ! out=$(peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile "$ORDERER_CA" \
+      -C mychannel -n produce \
+      --peerAddresses localhost:7051 --tlsRootCertFiles "$ORG1_CA" \
+      --peerAddresses localhost:9051 --tlsRootCertFiles "$ORG2_CA" \
+      --waitForEvent --waitForEventTimeout 30s \
+      -c "$1" 2>&1); then
+    echo "❌ Giao dịch thất bại:" >&2
+    echo "$out" >&2
+    echo "" >&2
+    echo "👉 Nguyên nhân thường gặp: cụm orderer BFT bị kẹt (sau khi máy ngủ / Docker tạm dừng)." >&2
+    echo "   Khắc phục: bash scripts/restart-orderers.sh   rồi chạy lại demo." >&2
+    exit 1
+  fi
 }
 
 query() { peer chaincode query -C mychannel -n produce -c "$1" 2>/dev/null; }
