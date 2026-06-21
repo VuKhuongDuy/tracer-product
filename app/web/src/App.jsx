@@ -90,6 +90,7 @@ export default function App() {
                     <div><b>{ev.stage}</b> → {ev.actor} <span className="muted">[{ev.actorRole}]</span></div>
                     <div className="muted">{ev.timestamp} · {ev.location}</div>
                     <div>{ev.note}</div>
+                    {ev.txId && <div className="txid">Tx: <code>{ev.txId}</code></div>}
                   </div>
                 ))}
               </div>

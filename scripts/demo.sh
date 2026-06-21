@@ -50,29 +50,29 @@ echo "Lô demo lần này: $LOT"
 
 echo "==> 1. Nông dân/HTX tạo lô sầu riêng"
 asUser 1 farmerA
-invoke "{\"function\":\"CreateLot\",\"Args\":[\"$LOT\",\"Sau rieng Ri6\",\"HTX Dak Lak - Krong Pac\",\"FARMER-A\",\"2026-06-10\",\"1500\"]}"
+invoke "{\"function\":\"CreateLot\",\"Args\":[\"$LOT\",\"Sầu riêng Ri6\",\"HTX Đắk Lắk - Krông Pắc\",\"FARMER-A\",\"2026-06-10\",\"1500\"]}"
 
 echo "==> 2. Cơ quan quản lý cấp chứng nhận VietGAP"
 asUser 3 regulator
-invoke "{\"function\":\"AddCertification\",\"Args\":[\"$LOT\",\"VietGAP-2026-DK-0091\",\"BoNN-CucBVTV\"]}"
+invoke "{\"function\":\"AddCertification\",\"Args\":[\"$LOT\",\"VietGAP-2026-DK-0091\",\"Bộ NN - Cục BVTV\"]}"
 
 echo "==> 3. Chuyển cho nhà đóng gói"
 asUser 1 htxStaff
-invoke "{\"function\":\"TransferCustody\",\"Args\":[\"$LOT\",\"PACKHOUSE-DK-12\",\"PROCESSOR\",\"PROCESSED\",\"Cu Mgar, Dak Lak\",\"Phan loai va dong goi xuat khau\"]}"
+invoke "{\"function\":\"TransferCustody\",\"Args\":[\"$LOT\",\"PACKHOUSE-DK-12\",\"PROCESSOR\",\"PROCESSED\",\"Cư M'gar, Đắk Lắk\",\"Phân loại và đóng gói xuất khẩu\"]}"
 
 echo "==> 4. Chuyển cho nhà phân phối"
 asUser 1 htxStaff
-invoke "{\"function\":\"TransferCustody\",\"Args\":[\"$LOT\",\"DIST-HCM-03\",\"DISTRIBUTOR\",\"DISTRIBUTED\",\"Kho lanh Thu Duc, TP.HCM\",\"Van chuyen lanh\"]}"
+invoke "{\"function\":\"TransferCustody\",\"Args\":[\"$LOT\",\"DIST-HCM-03\",\"DISTRIBUTOR\",\"DISTRIBUTED\",\"Kho lạnh Thủ Đức, TP.HCM\",\"Vận chuyển lạnh\"]}"
 
 echo "==> 5. Chuyển cho siêu thị bán lẻ"
 asUser 1 htxStaff
-invoke "{\"function\":\"TransferCustody\",\"Args\":[\"$LOT\",\"RETAIL-WINMART-Q1\",\"RETAILER\",\"RETAIL\",\"WinMart Quan 1, TP.HCM\",\"Len ke ban le\"]}"
+invoke "{\"function\":\"TransferCustody\",\"Args\":[\"$LOT\",\"RETAIL-WINMART-Q1\",\"RETAILER\",\"RETAIL\",\"WinMart Quận 1, TP.HCM\",\"Lên kệ bán lẻ\"]}"
 
 echo "==> 6. Lô thứ hai bị thu hồi (kịch bản sự cố ATTP)"
 asUser 1 farmerB
-invoke "{\"function\":\"CreateLot\",\"Args\":[\"$LOT_BAD\",\"Sau rieng Ri6\",\"HTX Dak Lak - Ea Kar\",\"FARMER-B\",\"2026-06-11\",\"800\"]}"
+invoke "{\"function\":\"CreateLot\",\"Args\":[\"$LOT_BAD\",\"Sầu riêng Ri6\",\"HTX Đắk Lắk - Ea Kar\",\"FARMER-B\",\"2026-06-11\",\"800\"]}"
 asUser 3 regulator
-invoke "{\"function\":\"RecallLot\",\"Args\":[\"$LOT_BAD\",\"BoNN-CucATTP\",\"Phat hien du luong thuoc BVTV vuot nguong\"]}"
+invoke "{\"function\":\"RecallLot\",\"Args\":[\"$LOT_BAD\",\"Bộ NN - Cục ATTP\",\"Phát hiện dư lượng thuốc BVTV vượt ngưỡng\"]}"
 
 echo ""
 # Reset to Org1 admin for queries

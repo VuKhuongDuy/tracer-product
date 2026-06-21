@@ -35,7 +35,7 @@ const (
 	piiCollection   = "farmerPII"
 )
 
-// PriceInfo la du lieu mat chi chia se giua cac ben giao dich (Org1+Org2).
+// PriceInfo là dữ liệu mật chỉ chia sẻ giữa các bên giao dịch (Org1+Org2).
 type PriceInfo struct {
 	BuyPrice  float64 `json:"buyPrice"`
 	SellPrice float64 `json:"sellPrice"`
@@ -43,7 +43,7 @@ type PriceInfo struct {
 	Party     string  `json:"party"`
 }
 
-// FarmerPII la du lieu ca nhan nong dan, chi chia se giua HTX va co quan QL (Org1+Org3).
+// FarmerPII là dữ liệu cá nhân nông dân, chỉ chia sẻ giữa HTX và cơ quan quản lý (Org1+Org3).
 type FarmerPII struct {
 	FullName     string `json:"fullName"`
 	IDNumber     string `json:"idNumber"`
@@ -59,6 +59,7 @@ type TraceEvent struct {
 	Location  string `json:"location"`
 	Note      string `json:"note"`
 	Timestamp string `json:"timestamp"` // derived from the transaction timestamp (deterministic)
+	TxID      string `json:"txId"`      // mã giao dịch (tx hash) ghi sự kiện này lên sổ cái
 }
 
 // ProduceLot is the asset stored on the ledger.
@@ -133,8 +134,9 @@ func (s *SmartContract) CreateLot(ctx contractapi.TransactionContextInterface,
 			Actor:     farmerID,
 			ActorRole: "FARMER",
 			Location:  origin,
-			Note:      "Lot harvested and registered",
+			Note:      "Thu hoạch và đăng ký lô",
 			Timestamp: ts,
+			TxID:      ctx.GetStub().GetTxID(),
 		}},
 	}
 
@@ -174,8 +176,9 @@ func (s *SmartContract) AddCertification(ctx contractapi.TransactionContextInter
 		Actor:     issuedBy,
 		ActorRole: "REGULATOR",
 		Location:  "",
-		Note:      "Certification added: " + certification,
+		Note:      "Đã cấp chứng nhận: " + certification,
 		Timestamp: ts,
+		TxID:      ctx.GetStub().GetTxID(),
 	})
 
 	return s.putLot(ctx, lot)
@@ -222,6 +225,7 @@ func (s *SmartContract) TransferCustody(ctx contractapi.TransactionContextInterf
 		Location:  location,
 		Note:      note,
 		Timestamp: ts,
+		TxID:      ctx.GetStub().GetTxID(),
 	})
 
 	if err := s.putLot(ctx, lot); err != nil {
@@ -256,8 +260,9 @@ func (s *SmartContract) RecallLot(ctx contractapi.TransactionContextInterface,
 		Actor:     regulator,
 		ActorRole: "REGULATOR",
 		Location:  "",
-		Note:      "RECALL issued: " + reason,
+		Note:      "Phát lệnh thu hồi: " + reason,
 		Timestamp: ts,
+		TxID:      ctx.GetStub().GetTxID(),
 	})
 
 	return s.putLot(ctx, lot)
@@ -395,8 +400,38 @@ func (s *SmartContract) putLot(ctx contractapi.TransactionContextInterface, lot 
 	return ctx.GetStub().PutState(lot.ID, lotJSON)
 }
 
+// requireLotAccess áp đặt kiểm soát truy cập theo từng danh tính cho dữ liệu mật.
+// Private data collection của Fabric chỉ phân quyền theo tổ chức (Org), nên mọi
+// thành viên Org1 (kể cả nông dân khác) đều đọc được. Để nông dân B không xem
+// được giá/PII của nông dân A, ta kiểm tra thêm ở tầng chaincode: nếu người gọi
+// là nông dân thì farmerId của họ phải khớp chủ lô.
+func (s *SmartContract) requireLotAccess(ctx contractapi.TransactionContextInterface, lotID string) error {
+	role, err := s.clientRole(ctx)
+	if err != nil {
+		return err
+	}
+	if role != "farmer" {
+		return nil // HTX, bán lẻ, cơ quan QL: phân quyền do collection của Fabric đảm nhận
+	}
+	lot, err := s.ReadLot(ctx, lotID)
+	if err != nil {
+		return err
+	}
+	certFarmer, err := s.clientFarmerID(ctx)
+	if err != nil {
+		return err
+	}
+	if lot.FarmerID != certFarmer {
+		return fmt.Errorf("access denied: nông dân %q không thể xem dữ liệu mật của lô thuộc %q", certFarmer, lot.FarmerID)
+	}
+	return nil
+}
+
 // ReadPrice returns the private price info for a lot. Only Org1/Org2 can read; others are denied by Fabric.
 func (s *SmartContract) ReadPrice(ctx contractapi.TransactionContextInterface, id string) (*PriceInfo, error) {
+	if err := s.requireLotAccess(ctx, id); err != nil {
+		return nil, err
+	}
 	data, err := ctx.GetStub().GetPrivateData(priceCollection, id)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read tradePrice: %w", err)
@@ -413,6 +448,9 @@ func (s *SmartContract) ReadPrice(ctx contractapi.TransactionContextInterface, i
 
 // ReadFarmerPII returns the farmer PII for a lot. Only Org1/Org3 can read; others are denied by Fabric.
 func (s *SmartContract) ReadFarmerPII(ctx contractapi.TransactionContextInterface, id string) (*FarmerPII, error) {
+	if err := s.requireLotAccess(ctx, id); err != nil {
+		return nil, err
+	}
 	data, err := ctx.GetStub().GetPrivateData(piiCollection, id)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read farmerPII: %w", err)

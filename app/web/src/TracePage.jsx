@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getTrace } from './api.js';
 
+// Trang chi tiết giao dịch của Fabric Explorer (app riêng, cổng 5174).
+const EXPLORER_BASE = import.meta.env.VITE_EXPLORER_URL || 'http://localhost:5174';
+
 export default function TracePage() {
   const { id } = useParams();
   const [t, setT] = useState(null);
@@ -35,6 +38,14 @@ export default function TracePage() {
             <div><b>{ev.stage}</b> — {ev.actor} <span className="muted">[{ev.actorRole}]</span></div>
             <div className="muted">{ev.timestamp} · {ev.location}</div>
             <div>{ev.note}</div>
+            {ev.txId && (
+              <div className="txid">
+                Mã giao dịch (tx hash):{' '}
+                <a href={`${EXPLORER_BASE}/tx/${ev.txId}`} target="_blank" rel="noreferrer" title="Mở trong Fabric Explorer">
+                  <code>{ev.txId}</code>
+                </a>
+              </div>
+            )}
           </div>
         ))}
       </div>
