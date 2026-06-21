@@ -1,52 +1,52 @@
-# Truy xuất nguồn gốc nông sản trên Hyperledger Fabric 3.x
+# Agricultural Produce Traceability on Hyperledger Fabric 3.x
 
-Giải pháp truy xuất nguồn gốc nông sản trên mạng blockchain permissioned **Hyperledger Fabric 3.1.5** (đồng thuận **BFT / SmartBFT**, 4 orderer, 3 tổ chức). Gồm 3 phần:
+A produce traceability solution built on a permissioned **Hyperledger Fabric 3.1.5** network (**BFT / SmartBFT** consensus, 4 orderers, 3 organizations). It has three parts:
 
-- **Mạng Fabric** — chaincode `produce` ghi lại vòng đời lô nông sản (tạo lô → chứng nhận → đóng gói → phân phối → bán lẻ) thành các mốc lịch sử bất biến. Bảo mật dữ liệu nhạy cảm bằng **Private Data** (giá, PII nông dân) và phân quyền người dùng bằng **ABAC**.
-- **App truy xuất** (`app/`) — REST API + UI React: chọn vai trò để thấy đúng dữ liệu được phép (Fabric cưỡng chế thật, không ẩn ở giao diện), kèm QR → trang tra cứu công khai cho người tiêu dùng.
-- **Explorer** (`explorer/`) — explorer tự build cho Fabric 3.x (qscc + fabric-gateway), thay cho Hyperledger Explorer vốn chưa hỗ trợ Fabric 3.x.
+- **Fabric network** — the `produce` chaincode records the full lifecycle of a produce lot (create → certify → pack → distribute → retail) as immutable history events. Sensitive data is protected with **Private Data** (price, farmer PII) and user-level access is enforced with **ABAC**.
+- **Traceability app** (`app/`) — REST API + React UI: pick a role to see only the data you are allowed to (enforced by Fabric, not hidden in the UI), plus a QR code linking to a public lookup page for consumers.
+- **Explorer** (`explorer/`) — a custom explorer for Fabric 3.x (qscc + fabric-gateway), replacing Hyperledger Explorer which does not support Fabric 3.x.
 
-## Ảnh demo
+## Screenshots
 
-### App truy xuất nguồn gốc
+### Traceability app
 
-Danh sách lô — chọn vai trò, dữ liệu mật hiển thị 🔒 khi Fabric chặn:
+Lot list — pick a role; confidential fields show 🔒 when Fabric blocks access:
 
-![Danh sách lô](publics/list-lot.png)
+![Lot list](publics/list-lot.png)
 
-Chi tiết lô — hành trình đầy đủ + QR cho người tiêu dùng:
+Lot detail — full provenance trail + consumer QR code:
 
-![Chi tiết lô](publics/detail-lot-1.png)
-![Chi tiết lô](publics/detail-lot-2.png)
+![Lot detail](publics/detail-lot-1.png)
+![Lot detail](publics/detail-lot-2.png)
 
 ### Blockchain Explorer (Fabric 3.x)
 
-Tổng quan mạng — chiều cao chuỗi, giao dịch theo block, danh sách block & tx mới nhất:
+Network overview — chain height, transactions per block, latest blocks & transactions:
 
-![Explorer tổng quan](publics/explorer-1.png)
-![Explorer mạng lưới](publics/explorer-2.png)
+![Explorer overview](publics/explorer-1.png)
+![Explorer network](publics/explorer-2.png)
 
-Chi tiết giao dịch — tx hash, chaincode, hàm gọi, tham số, endorser:
+Transaction detail — tx hash, chaincode, invoked function, arguments, endorsers:
 
-![Chi tiết giao dịch](publics/explorer-tx-detail.png)
+![Transaction detail](publics/explorer-tx-detail.png)
 
-## Chạy nhanh
+## Quick start
 
 ```bash
-# 1. Khởi động mạng BFT + Org3 + deploy chaincode
+# 1. Start the BFT network + Org3 + deploy chaincode
 cd fabric-samples/test-network
 ./network.sh up createChannel -bft -ca -c mychannel
 cd addOrg3 && ./addOrg3.sh up -c mychannel -ca && cd ..
 ./network.sh deployCC -ccn produce -ccp ../../chaincode/produce-traceability -ccl go -c mychannel
 
-# 2. Tạo danh tính + chạy app
+# 2. Register identities + run the app
 bash scripts/register-users.sh
 cd app/server && npm install && node server.js   # API :3000
 cd app/web && npm install && npm run dev          # UI  :5173
 
-# 3. Chạy explorer (server :3001 + web :5174)
+# 3. Run the explorer (server :3001 + web :5174)
 cd explorer/server && npm install && npm start
 cd explorer/web && npm install && npm run dev
 ```
 
-> Hướng dẫn chi tiết: app xem [app/web/RUN.md](app/web/RUN.md), explorer xem [explorer/RUN.md](explorer/RUN.md).
+> Detailed guides: app — [app/web/RUN.md](app/web/RUN.md), explorer — [explorer/RUN.md](explorer/RUN.md).
