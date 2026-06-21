@@ -116,6 +116,7 @@ tràn text cho hash dài ngay từ đầu (`overflow-wrap`, `word-break`).
 - **Dashboard `/`**: thẻ tổng quan (height, tổng tx, #org/peer/orderer) + ô **tra cứu
   tx hash** ở đầu (submit → điều hướng `/tx/:txid`) + biểu đồ tx/block (SVG tự vẽ,
   không thêm lib nặng) + bảng block mới nhất + bảng tx mới nhất.
+  **Tự động làm mới** mỗi 5 giây (có thể bật/tắt), cộng nút làm mới thủ công.
 - **Trang block `/block/:n`**: header block (số, hash, prevHash, thời gian) + danh
   sách tx, mỗi tx link sang chi tiết.
 - **Trang tx `/tx/:txid`**: đầy đủ — txId, chaincode, hàm + args, creatorMSP,
