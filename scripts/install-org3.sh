@@ -11,8 +11,9 @@ VERSION="${1:-1.0}"
 SEQUENCE="${2:-1}"
 LABEL="produce_${VERSION}"
 
-TN=/Users/alex/Project/hyperledger-fabric/fabric-samples/test-network
-CC=/Users/alex/Project/hyperledger-fabric/chaincode/produce-traceability
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TN="$REPO_ROOT/fabric-samples/test-network"
+CC="$REPO_ROOT/chaincode/produce-traceability"
 cd "$TN"
 
 export PATH=${PWD}/../bin:$PATH
@@ -36,7 +37,7 @@ echo "Package ID: $PKGID"
 peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls \
   --cafile ${PWD}/organizations/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem \
   --channelID mychannel --name produce --version "$VERSION" --package-id "$PKGID" \
-  --collections-config /Users/alex/Project/hyperledger-fabric/chaincode/produce-traceability/collections_config.json \
+  --collections-config "$CC/collections_config.json" \
   --sequence "$SEQUENCE"
 
 echo "== Approvals =="

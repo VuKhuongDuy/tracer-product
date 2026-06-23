@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Đăng ký + enroll user có attribute (ABAC) vào wallet cho backend & script test.
 set -euo pipefail
-TN=/Users/alex/Project/hyperledger-fabric/fabric-samples/test-network
-WALLET=/Users/alex/Project/hyperledger-fabric/app/server/wallet
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TN="$REPO_ROOT/fabric-samples/test-network"
+WALLET="$REPO_ROOT/app/server/wallet"
 cd "$TN"
 export PATH=${PWD}/../bin:$PATH
 mkdir -p "$WALLET"
