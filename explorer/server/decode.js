@@ -5,6 +5,7 @@
 // Các hàm summarize* là hàm thuần (nhận object đã decode) để unit test bằng fixture.
 const { BlockDecoder } = require('fabric-common');
 const fabprotos = require('fabric-protos');
+const { X509Certificate } = require('crypto');
 
 // Long-like {low, high} -> Number (đủ cho số block thực tế).
 function longToNum(n) {
@@ -28,38 +29,70 @@ function argsToStrings(args) {
   });
 }
 
-function validationLabel(code) {
-  return code === 0 ? 'VALID' : `INVALID(${code})`;
+// Trạng thái giao dịch dạng chung (giấu chi tiết Fabric).
+function statusLabel(code) {
+  return code === 0 ? 'Success' : 'Failed';
 }
 
-// summarizeTx: 1 envelope (đã decode) -> object giao dịch gọn.
+// bufFrom: chuẩn hoá Buffer-like ({type:'Buffer',data:[]} hoặc Buffer) -> Buffer.
+function bufFrom(b) {
+  if (!b) return Buffer.alloc(0);
+  if (b.type === 'Buffer' && Array.isArray(b.data)) return Buffer.from(b.data);
+  return Buffer.from(b);
+}
+
+// senderName: lấy tên thật (CN) từ chứng chỉ của người gửi. Không lộ MSP/Org.
+function senderName(creator) {
+  try {
+    const cert = new X509Certificate(bufFrom(creator && creator.id_bytes));
+    const cn = (cert.subject || '').split('\n').find((l) => l.startsWith('CN='));
+    return cn ? cn.slice(3).trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+// stateChanges: các key được ghi (read-write set) -> [{key, value, isDelete}].
+// Bỏ namespace nội bộ `_lifecycle` của Fabric.
+function stateChanges(ext) {
+  const out = [];
+  const nsRwset = (ext && ext.results && ext.results.ns_rwset) || [];
+  for (const ns of nsRwset) {
+    if (!ns || ns.namespace === '_lifecycle') continue;
+    for (const w of (ns.rwset && ns.rwset.writes) || []) {
+      out.push({ key: w.key || '', value: bufFrom(w.value).toString(), isDelete: !!w.is_delete });
+    }
+  }
+  return out;
+}
+
+// summarizeTx: 1 envelope (đã decode) -> object giao dịch dạng chung (không lộ Fabric).
 function summarizeTx(envelope, validationCode) {
   const ch = envelope.payload.header.channel_header;
   const sig = envelope.payload.header.signature_header;
   const tx = {
     txId: ch.tx_id || '',
-    type: ch.typeString || String(ch.type),
     timestamp: ch.timestamp || '',
-    creatorMSP: (sig && sig.creator && sig.creator.mspid) || '',
-    chaincode: '',
-    function: '',
-    args: [],
-    endorsers: [],
-    validation: validationLabel(validationCode),
+    status: statusLabel(validationCode),
+    from: senderName(sig && sig.creator),
+    to: '',
+    method: '',
+    params: [],
+    stateChanges: [],
   };
 
-  // Chỉ ENDORSER_TRANSACTION (type 3) mới có chaincode/args/endorsers.
+  // Chỉ ENDORSER_TRANSACTION (type 3) mới có contract/method/params.
   const actions = envelope.payload.data && envelope.payload.data.actions;
   if (Array.isArray(actions) && actions.length) {
     const action = actions[0];
     const spec = action.payload.chaincode_proposal_payload.input.chaincode_spec;
     const ext = action.payload.action.proposal_response_payload.extension;
-    tx.chaincode = (spec.chaincode_id && spec.chaincode_id.name) ||
+    tx.to = (spec.chaincode_id && spec.chaincode_id.name) ||
       (ext && ext.chaincode_id && ext.chaincode_id.name) || '';
     const args = argsToStrings(spec.input && spec.input.args);
-    tx.function = args[0] || '';
-    tx.args = args.slice(1);
-    tx.endorsers = (action.payload.action.endorsements || []).map((e) => e.endorser && e.endorser.mspid).filter(Boolean);
+    tx.method = args[0] || '';
+    tx.params = args.slice(1);
+    tx.stateChanges = stateChanges(ext);
   }
   return tx;
 }

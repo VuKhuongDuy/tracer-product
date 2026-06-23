@@ -77,9 +77,15 @@ echo "  [ok] docker daemon reachable"
 # ------------------------------------------------------------------ #
 STEP="1/install-fabric"
 banner "Step 1 — Install Fabric ${FABRIC_VERSION} (CA ${CA_VERSION})"
-if [[ -x "$REPO_ROOT/fabric-samples/bin/peer" ]]; then
-  echo "  fabric-samples/bin/peer already present — skipping download."
+# Check the binary actually RUNS (right OS/arch), not just that the file exists.
+# A repo copied from a Mac to a Linux server has darwin binaries here, which the
+# old file-exists check would wrongly accept (network.sh then dies with
+# "Peer binary ... not found" / exec format error).
+if "$REPO_ROOT/fabric-samples/bin/peer" version >/dev/null 2>&1; then
+  echo "  Fabric binaries present and runnable on this host — skipping download."
 else
+  echo "  Fabric binaries missing or built for another OS/arch — (re)downloading..."
+  rm -rf "$REPO_ROOT/fabric-samples/bin" "$REPO_ROOT/fabric-samples/config"
   ( cd "$REPO_ROOT" && bash install-fabric.sh -f "$FABRIC_VERSION" -c "$CA_VERSION" docker binary samples )
 fi
 
@@ -93,7 +99,26 @@ export FABRIC_CFG_PATH="$REPO_ROOT/fabric-samples/config"
 if [[ "$CLEAN" == "true" ]]; then
   STEP="clean/down"
   banner "Tearing down any existing network (--clean)"
-  ( cd "$TN" && ./network.sh down )
+  ( cd "$TN" && ./network.sh down ) || true
+
+  # Belt-and-suspenders. 'network.sh down' can leave stale orderer/peer ledger
+  # volumes behind; those are the usual cause of 'ledger already exists' and
+  # FORBIDDEN errors on the next 'up' (new crypto vs. old genesis in the volume).
+  echo "  Removing any leftover Fabric containers / volumes / network..."
+  ids=$(docker ps -a --format '{{.ID}} {{.Names}}' \
+        | awk '/orderer|peer0\.org|ca_org|ca_orderer|dev-peer|^.* cli$/{print $1}')
+  [[ -n "$ids" ]] && docker rm -f $ids >/dev/null 2>&1 || true
+  vols=$(docker volume ls -q | grep -E 'example\.com' || true)
+  [[ -n "$vols" ]] && docker volume rm $vols >/dev/null 2>&1 || true
+  docker network rm fabric_test >/dev/null 2>&1 || true
+  # Stale crypto / channel artifacts on disk.
+  rm -rf "$TN/organizations/peerOrganizations" \
+         "$TN/organizations/ordererOrganizations" \
+         "$TN/organizations/fabric-ca/org1" "$TN/organizations/fabric-ca/org2" \
+         "$TN/organizations/fabric-ca/org3" "$TN/organizations/fabric-ca/ordererOrg" \
+         "$TN/addOrg3/fabric-ca/org3" 2>/dev/null || true
+  rm -f "$TN/channel-artifacts/"* "$TN"/*.tar.gz 2>/dev/null || true
+  echo "  Cleanup done."
 fi
 
 # ------------------------------------------------------------------ #
@@ -104,11 +129,68 @@ banner "Step 2 — Start BFT network (4 orderers) + channel '${CHANNEL}'"
 ( cd "$TN" && ./network.sh up createChannel -bft -ca -c "$CHANNEL" )
 
 # ------------------------------------------------------------------ #
+# Step 2b — wait until the BFT cluster can actually serve the channel.
+# 'network.sh up' returns as soon as containers start + the channel is created,
+# but SmartBFT still needs a few seconds to elect a leader / establish a view.
+# Calling addOrg3 too early makes the channel-config fetch fail with FORBIDDEN.
+# ------------------------------------------------------------------ #
+STEP="2b/wait-bft-ready"
+banner "Step 2b — Wait for BFT orderers to be ready to serve '$CHANNEL'"
+ORDERER_CA="$TN/organizations/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem"
+tmp_block="$(mktemp)"; trap 'rm -f "$tmp_block"' EXIT
+ready=false
+for i in $(seq 1 30); do
+  if CORE_PEER_TLS_ENABLED=true CORE_PEER_LOCALMSPID=Org1MSP \
+     CORE_PEER_TLS_ROOTCERT_FILE="$TN/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt" \
+     CORE_PEER_MSPCONFIGPATH="$TN/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp" \
+     CORE_PEER_ADDRESS=localhost:7051 \
+     peer channel fetch config "$tmp_block" -o localhost:7050 \
+       --ordererTLSHostnameOverride orderer.example.com -c "$CHANNEL" \
+       --tls --cafile "$ORDERER_CA" >/dev/null 2>&1; then
+    ready=true; echo "  BFT cluster ready (after ~$((i*3))s)."; break
+  fi
+  echo "  not ready yet — retry $i/30..."; sleep 3
+done
+[[ "$ready" == "true" ]] || { echo "Orderers did not become ready in time." >&2; exit 1; }
+
+# ------------------------------------------------------------------ #
 # Step 3 — add Org3 (regulator) and join the channel
 # ------------------------------------------------------------------ #
 STEP="3/add-org3"
 banner "Step 3 — Add Org3 (regulator) and join channel"
-( cd "$TN/addOrg3" && ./addOrg3.sh up -c "$CHANNEL" -ca )
+( cd "$TN/addOrg3" && ./addOrg3.sh up -c "$CHANNEL" -ca ) || \
+  echo "  addOrg3.sh returned non-zero (usually the BFT join race) — verifying / completing below."
+
+# addOrg3's Org3 join fetches the genesis block with NO retry, right after the
+# config update that adds Org3 is submitted. Under BFT the new config isn't
+# committed yet at that instant, so Org3 is not a member -> FORBIDDEN. The config
+# update itself has already succeeded, so we complete the join here (idempotent,
+# retried) instead of patching the fabric-samples script (which a fresh server
+# re-clones pristine).
+export CORE_PEER_TLS_ENABLED=true CORE_PEER_LOCALMSPID=Org3MSP
+export CORE_PEER_TLS_ROOTCERT_FILE="$TN/organizations/peerOrganizations/org3.example.com/peers/peer0.org3.example.com/tls/ca.crt"
+export CORE_PEER_MSPCONFIGPATH="$TN/organizations/peerOrganizations/org3.example.com/users/Admin@org3.example.com/msp"
+export CORE_PEER_ADDRESS=localhost:11051
+
+if peer channel list 2>/dev/null | grep -qx "$CHANNEL"; then
+  echo "  Org3 already joined '$CHANNEL'."
+else
+  echo "  Completing Org3 join (fetch genesis + join, with retry for BFT)..."
+  BLOCKFILE="$TN/channel-artifacts/${CHANNEL}.block"
+  joined=false
+  for i in $(seq 1 20); do
+    if peer channel fetch 0 "$BLOCKFILE" -o localhost:7050 \
+         --ordererTLSHostnameOverride orderer.example.com -c "$CHANNEL" \
+         --tls --cafile "$ORDERER_CA" >/dev/null 2>&1 \
+       && peer channel join -b "$BLOCKFILE" >/dev/null 2>&1; then
+      joined=true; echo "  Org3 joined '$CHANNEL' (after ~$((i*3))s)."; break
+    fi
+    sleep 3
+  done
+  [[ "$joined" == "true" ]] || { echo "Org3 failed to join '$CHANNEL'." >&2; exit 1; }
+  ( cd "$TN" && ./scripts/setAnchorPeer.sh 3 "$CHANNEL" ) >/dev/null 2>&1 \
+    || echo "  (anchor-peer update skipped — non-fatal)"
+fi
 
 # ------------------------------------------------------------------ #
 # Step 4 — deploy the produce chaincode (Org1 + Org2) with collections

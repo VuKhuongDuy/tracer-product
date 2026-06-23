@@ -1,48 +1,106 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getTx } from '../api.js';
-import { fmtTime, CcBadge, ValidBadge, BlockLink } from '../util.jsx';
+import { fmtTime, ago, StatusBadge, BlockLink, actorLabel, contractLabel, methodLabel } from '../util.jsx';
+
+// Nút sao chép nhỏ kiểu Blockscout.
+function Copy({ text }) {
+  const [done, setDone] = useState(false);
+  if (!text) return null;
+  const copy = () => {
+    navigator.clipboard?.writeText(text);
+    setDone(true);
+    setTimeout(() => setDone(false), 1200);
+  };
+  return <button className="copy" onClick={copy} title="Sao chép">{done ? '✓' : '⧉'}</button>;
+}
+
+// Một hàng nhãn-trái / giá trị-phải.
+function Row({ label, children }) {
+  return (
+    <div className="drow">
+      <div className="dlabel">{label}</div>
+      <div className="dval">{children}</div>
+    </div>
+  );
+}
 
 export default function TxPage() {
   const { txid } = useParams();
   const [t, setT] = useState(null);
   const [err, setErr] = useState('');
+  const [tab, setTab] = useState('details');
 
   useEffect(() => {
-    setT(null); setErr('');
+    setT(null); setErr(''); setTab('details');
     getTx(txid).then(setT).catch((e) => setErr(e.message));
   }, [txid]);
 
   if (err) return <div className="alert">{err}</div>;
-  if (!t) return <p className="muted">Đang tải…</p>;
+  if (!t) return <p className="muted">Đang tải dữ liệu giao dịch…</p>;
+
+  const changes = t.stateChanges || [];
 
   return (
-    <div className="panel">
-      <h2>Chi tiết giao dịch</h2>
-      <div className="kv">
-        <div className="k">Tx hash</div><div className="v hash">{t.txId}</div>
-        <div className="k">Block</div><div className="v"><BlockLink n={t.blockNumber} /></div>
-        <div className="k">Loại</div><div className="v">{t.type}</div>
-        <div className="k">Trạng thái</div><div className="v"><ValidBadge value={t.validation} /></div>
-        <div className="k">Thời gian</div><div className="v">{fmtTime(t.timestamp)}</div>
-        <div className="k">Người tạo (MSP)</div><div className="v">{t.creatorMSP || '—'}</div>
-        <div className="k">Chaincode</div><div className="v"><CcBadge name={t.chaincode || t.type} /></div>
-        <div className="k">Hàm gọi</div><div className="v">{t.function ? <span className="badge fn">{t.function}</span> : <span className="muted">—</span>}</div>
-        <div className="k">Tham số (args)</div>
-        <div className="v">
-          {t.args && t.args.length ? (
-            <ol className="mono" style={{ margin: 0, paddingLeft: 18 }}>
-              {t.args.map((a, i) => <li key={i}>{a}</li>)}
-            </ol>
-          ) : <span className="muted">—</span>}
+    <>
+      <h2 className="page-title">Chi tiết giao dịch</h2>
+
+      <div className="panel">
+        <div className="tabs">
+          <button className={`tab ${tab === 'details' ? 'active' : ''}`} onClick={() => setTab('details')}>Chi tiết</button>
+          <button className={`tab ${tab === 'logs' ? 'active' : ''}`} onClick={() => setTab('logs')}>
+            Nhật ký hệ thống{changes.length ? ` (${changes.length})` : ''}
+          </button>
         </div>
-        <div className="k">Endorser</div>
-        <div className="v">
-          {t.endorsers && t.endorsers.length ? (
-            <span className="pill-list">{t.endorsers.map((e) => <span key={e} className="badge cc">{e}</span>)}</span>
-          ) : <span className="muted">—</span>}
-        </div>
+
+        {tab === 'details' ? (
+          <div className="drows">
+            <Row label="Mã giao dịch">
+              <span className="hash">{t.txId}</span><Copy text={t.txId} />
+            </Row>
+            <Row label="Trạng thái"><StatusBadge status={t.status} /></Row>
+            <Row label="Khối">
+              <BlockLink n={t.blockNumber} />
+              {typeof t.confirmations === 'number' && <span className="confirm">{t.confirmations} xác nhận</span>}
+            </Row>
+            <Row label="Dấu thời gian">
+              <span className="muted">🕒 {ago(t.timestamp)}</span> <span>({fmtTime(t.timestamp)})</span>
+            </Row>
+
+            <div className="ddivider" />
+
+            <Row label="Từ"><span className="party-lg">{actorLabel(t.from)}</span><Copy text={t.from} /></Row>
+            <Row label="Đến"><span className="party-lg">{contractLabel(t.to)}</span><Copy text={t.to} /></Row>
+            <Row label="Phương thức">
+              {t.method ? <span className="method-chip">{methodLabel(t.method)}</span> : <span className="muted">—</span>}
+            </Row>
+
+            <div className="ddivider" />
+
+            <Row label="Dữ liệu đầu vào">
+              {t.params && t.params.length ? (
+                <ol className="params">
+                  {t.params.map((p, i) => <li key={i}><span className="mono">{p}</span></li>)}
+                </ol>
+              ) : <span className="muted">Không có tham số.</span>}
+            </Row>
+          </div>
+        ) : (
+          changes.length ? (
+            <table>
+              <thead><tr><th style={{ width: 220 }}>Khoá</th><th>Giá trị</th></tr></thead>
+              <tbody>
+                {changes.map((c, i) => (
+                  <tr key={i}>
+                    <td className="mono">{c.key}</td>
+                    <td>{c.isDelete ? <span className="badge invalid">đã xoá</span> : <span className="mono statev">{c.value}</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <span className="muted">Giao dịch này không thay đổi trạng thái.</span>
+        )}
       </div>
-    </div>
+    </>
   );
 }

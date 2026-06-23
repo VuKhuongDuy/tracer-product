@@ -12,4 +12,3 @@ export const getBlock = (n) => fetch(`/api/blocks/${n}`).then(j);
 export const getTx = (txid) => fetch(`/api/tx/${encodeURIComponent(txid)}`).then(j);
 export const getTxs = (count = 15) => fetch(`/api/txs?count=${count}`).then(j);
 export const getStats = (count = 20) => fetch(`/api/stats?count=${count}`).then(j);
-export const getNetwork = () => fetch('/api/network').then(j);

@@ -31,16 +31,21 @@ test('decodeBlockBytes map đúng cấu trúc block', () => {
   assert.strictEqual(b.transactions.length, 1);
 });
 
-test('summarizeTx rút trích chaincode/function/args/endorsers/validation', () => {
+test('summarizeTx rút trích trường chung from/to/method/params/stateChanges/status', () => {
   const tx = decodeBlockBytes(blockBytes).transactions[0];
-  assert.strictEqual(tx.type, 'ENDORSER_TRANSACTION');
-  assert.strictEqual(tx.chaincode, 'produce');
-  assert.strictEqual(tx.function, 'RecallLot');
-  assert.ok(Array.isArray(tx.args) && tx.args.length >= 1);
-  assert.strictEqual(tx.validation, 'VALID');
+  assert.strictEqual(tx.to, 'produce');
+  assert.strictEqual(tx.method, 'RecallLot');
+  assert.strictEqual(tx.status, 'Success');
+  assert.strictEqual(tx.from, 'regulator');
+  assert.ok(Array.isArray(tx.params) && tx.params.length >= 1);
   assert.ok(tx.txId.length === 64);
-  assert.ok(tx.creatorMSP.length > 0);
-  assert.ok(tx.endorsers.length > 0);
-  // giữ nguyên tiếng Việt có dấu trong args
-  assert.ok(tx.args.some((a) => /[ạảấầ]|BVTV/.test(a)) || tx.args.join('').length > 0);
+  // state changes có key được ghi, không lộ namespace nội bộ _lifecycle
+  assert.ok(Array.isArray(tx.stateChanges) && tx.stateChanges.length >= 1);
+  assert.ok(tx.stateChanges.some((c) => c.key && c.key.length > 0));
+  // không rò trường đặc thù Fabric
+  assert.strictEqual(tx.chaincode, undefined);
+  assert.strictEqual(tx.creatorMSP, undefined);
+  assert.strictEqual(tx.endorsers, undefined);
+  // giữ nguyên tiếng Việt có dấu trong params
+  assert.ok(tx.params.join('').length > 0);
 });

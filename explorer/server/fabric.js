@@ -7,8 +7,10 @@ const crypto = require('crypto');
 const grpc = require('@grpc/grpc-js');
 const { connect, signers } = require('@hyperledger/fabric-gateway');
 
-const TN = '/Users/alex/Project/hyperledger-fabric/fabric-samples/test-network';
-const WALLET = '/Users/alex/Project/hyperledger-fabric/app/server/wallet';
+// Gốc repo suy ra từ vị trí file (explorer/server/ -> ../../), cho phép override qua env.
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const TN = process.env.TEST_NETWORK || path.join(REPO_ROOT, 'fabric-samples', 'test-network');
+const WALLET = process.env.WALLET || path.join(REPO_ROOT, 'app', 'server', 'wallet');
 const CHANNEL = process.env.CHANNEL || 'mychannel';
 
 // Danh tính chỉ đọc dùng để truy vấn qscc.

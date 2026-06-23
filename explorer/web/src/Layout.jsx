@@ -1,26 +1,31 @@
 import { useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
 
 export default function Layout() {
   const [q, setQ] = useState('');
   const navigate = useNavigate();
   const submit = (e) => {
     e.preventDefault();
-    const txid = q.trim();
-    if (txid) { navigate(`/tx/${encodeURIComponent(txid)}`); setQ(''); }
+    const v = q.trim();
+    if (!v) return;
+    // Số -> tra cứu khối, còn lại -> tra cứu giao dịch.
+    if (/^\d+$/.test(v)) navigate(`/block/${v}`);
+    else navigate(`/tx/${encodeURIComponent(v)}`);
+    setQ('');
   };
   return (
     <>
       <header className="topbar">
         <div className="inner">
-          <span className="brand">🔎 Fabric 3.x Explorer</span>
+          <Link to="/" className="brand">🔎 HANOI TRACE Explorer</Link>
           <nav className="nav">
-            <NavLink to="/" end>Tổng quan</NavLink>
-            <NavLink to="/network">Mạng lưới</NavLink>
+            <NavLink to="/" end>Trang chủ</NavLink>
+            <NavLink to="/blocks">Khối</NavLink>
+            <NavLink to="/txs">Giao dịch</NavLink>
           </nav>
           <form className="search" onSubmit={submit}>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tra cứu theo tx hash…" />
-            <button type="submit">Tra cứu</button>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm theo mã giao dịch / số khối…" />
+            <button type="submit">Tìm</button>
           </form>
         </div>
       </header>
