@@ -57,7 +57,10 @@ function loadSigner(userId) {
   throw new Error(`No matching private key found for ${userId}`);
 }
 
-async function withContract(userId, fn) {
+// openGateway: mở MỘT kết nối gateway bền vững cho một identity và trả về
+// { contract, close }. Dùng khi cần tái sử dụng kết nối cho nhiều giao dịch
+// (vd loadgen) — tránh churn connect/close mỗi tx vốn gây nghẽn khi gửi burst.
+function openGateway(userId) {
   const cfg = IDENTITIES[userId];
   if (!cfg) throw new Error(`unknown identity: ${userId}`);
   const org = { ...ORGS[cfg.org], orgKey: cfg.org };
@@ -71,12 +74,17 @@ async function withContract(userId, fn) {
     submitOptions: () => ({ deadline: Date.now() + 30000 }),
     commitStatusOptions: () => ({ deadline: Date.now() + 60000 }),
   });
+  const contract = gateway.getNetwork(CHANNEL).getContract(CHAINCODE);
+  return { contract, close: () => { gateway.close(); client.close(); } };
+}
+
+// withContract: mở kết nối, chạy fn, rồi đóng — tiện cho request rời rạc (app).
+async function withContract(userId, fn) {
+  const { contract, close } = openGateway(userId);
   try {
-    const contract = gateway.getNetwork(CHANNEL).getContract(CHAINCODE);
     return await fn(contract);
   } finally {
-    gateway.close();
-    client.close();
+    close();
   }
 }
 
@@ -96,4 +104,4 @@ async function tryReadJSON(contract, fnName, ...args) {
   }
 }
 
-module.exports = { IDENTITIES, listIdentities, withContract, evaluateJSON, tryReadJSON, CHANNEL, CHAINCODE };
+module.exports = { IDENTITIES, listIdentities, openGateway, withContract, evaluateJSON, tryReadJSON, CHANNEL, CHAINCODE };

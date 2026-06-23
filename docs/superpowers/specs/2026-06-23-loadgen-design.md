@@ -53,14 +53,21 @@ If a chosen action has no eligible lot, fall back to CreateLot.
 - products: ["Sầu riêng Ri6","Cà phê Robusta","Bơ 034","Chôm chôm","Bơ sáp"]; origin "HTX Đắk Lắk – <huyện>"; harvestDate recent; quantityKg random 500–3000.
 - price `{buyPrice,sellPrice,currency:"VND",party}`; pii `{fullName,idNumber,phone,plotLocation}` — same shape the app uses (`transientFrom`).
 
-**Rate control:** schedule a tick every `INTERVAL_MS` (default derived from
-`TPS`, default TPS=1.5 → ~667ms). Each tick fires one transaction WITHOUT awaiting
-commit serially; in-flight submissions run concurrently up to `MAX_INFLIGHT`
-(default 8). If at cap, skip the tick. This decouples throughput from BFT commit
-latency (~1–2s).
+**Rate + batching:** each tick fires a BURST of `BATCH_SIZE` (default 3)
+transactions near-simultaneously, WITHOUT awaiting commit. Because the orderer
+cuts a block at `MaxMessageCount=10` or `BatchTimeout=2s`, a burst of N (N≤10)
+arriving together lands in ONE block — this is how we get multiple tx/block.
+`INTERVAL_MS` defaults to `BATCH_SIZE*1000/TPS` so throughput stays ≈ TPS.
+Within a burst, the same lot is not targeted twice (avoids MVCC_READ_CONFLICT).
+In-flight submissions are capped by `MAX_INFLIGHT` (default `max(8, 2*BATCH_SIZE)`).
 
-**Config (env):** `TPS`, `INTERVAL_MS` (overrides TPS), `MAX_INFLIGHT`,
-`DURATION_SEC` (0 = forever), `SEED_LOTS` (pre-create N lots on start, default 3).
+**Persistent connections:** the generator opens ONE gateway connection per
+identity (`fabric.openGateway`) and reuses it for all submits. Opening/closing a
+connection per tx (as `withContract` does) causes severe latency under bursts
+(observed ~40s); reuse keeps commit latency ~150ms.
+
+**Config (env):** `TPS` (1.5), `BATCH_SIZE` (3), `INTERVAL_MS` (overrides),
+`MAX_INFLIGHT`, `DURATION_SEC` (0 = forever), `SEED_LOTS` (3).
 
 **Preflight:** verify `app/server/wallet/<id>/msp/signcerts/cert.pem` exists for
 the identities used; if missing, exit with a message telling the user to run

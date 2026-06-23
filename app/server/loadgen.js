@@ -9,17 +9,28 @@
 //   node loadgen.js                       # run continuously (Ctrl-C to stop)
 //   TPS=2 MAX_INFLIGHT=10 node loadgen.js
 //
-// Env: TPS (default 1.5), INTERVAL_MS (overrides TPS), MAX_INFLIGHT (8),
-//      DURATION_SEC (0 = forever), SEED_LOTS (3).
+// Env: TPS (default 1.5), BATCH_SIZE (3), INTERVAL_MS (overrides TPS),
+//      MAX_INFLIGHT, DURATION_SEC (0 = forever), SEED_LOTS (3).
+//
+// BATCH_SIZE = how many tx are fired together per burst, i.e. roughly how many
+// tx land in ONE block. The orderer cuts a block at MaxMessageCount=10 or after
+// BatchTimeout=2s, so firing a burst of N (N<=10) near-simultaneously batches
+// them into a single block. Keep BATCH_SIZE <= 10 to fit one block.
 //
 const fs = require('fs');
 const path = require('path');
-const { withContract, IDENTITIES } = require('./fabric');
+const { openGateway, IDENTITIES } = require('./fabric');
+
+// Identities the generator submits as. One persistent gateway connection each.
+const USED_IDENTITIES = ['farmerA', 'farmerB', 'htxStaff', 'regulator'];
+const conns = {}; // identity -> { contract, close }
 
 // ---- config ----
 const TPS = Number(process.env.TPS || 1.5);
-const INTERVAL_MS = Number(process.env.INTERVAL_MS || Math.max(1, Math.round(1000 / TPS)));
-const MAX_INFLIGHT = Number(process.env.MAX_INFLIGHT || 8);
+const BATCH_SIZE = Math.max(1, Number(process.env.BATCH_SIZE || 3)); // tx per burst ≈ tx per block
+// One burst of BATCH_SIZE tx is fired per interval; interval is sized to keep TPS.
+const INTERVAL_MS = Number(process.env.INTERVAL_MS || Math.max(1, Math.round(BATCH_SIZE * 1000 / TPS)));
+const MAX_INFLIGHT = Number(process.env.MAX_INFLIGHT || Math.max(8, BATCH_SIZE * 2));
 const DURATION_SEC = Number(process.env.DURATION_SEC || 0);
 const SEED_LOTS = Number(process.env.SEED_LOTS || 3);
 const PRIVATE_ENDORSERS = ['Org1MSP', 'Org2MSP'];
@@ -120,7 +131,7 @@ async function fire(tx) {
   inFlight += 1;
   const t0 = Date.now();
   try {
-    await withContract(tx.identity, tx.run);
+    await tx.run(conns[tx.identity].contract);
     if (tx.onCommit) tx.onCommit();
     stats[tx.action] += 1; stats.ok += 1;
     console.log(`${now()} [${tx.action.padEnd(15)}] as=${tx.identity.padEnd(9)} lot=${tx.lot.id} ${Date.now() - t0}ms`);
@@ -134,7 +145,17 @@ async function fire(tx) {
 
 function tick() {
   if (stopping) return;
-  if (inFlight < MAX_INFLIGHT) fire(nextTransaction());
+  // Fire a burst of BATCH_SIZE tx near-simultaneously so the orderer batches
+  // them into one block. Avoid two tx in the same burst touching the same lot
+  // (would cause an MVCC read conflict and an invalid tx in the block).
+  const usedLots = new Set();
+  for (let i = 0; i < BATCH_SIZE && inFlight < MAX_INFLIGHT; i++) {
+    let tx = nextTransaction();
+    let guard = 0;
+    while (tx.action !== 'CreateLot' && usedLots.has(tx.lot.id) && guard++ < 5) tx = nextTransaction();
+    if (tx.action !== 'CreateLot') usedLots.add(tx.lot.id);
+    fire(tx);
+  }
   setTimeout(tick, INTERVAL_MS);
 }
 
@@ -171,13 +192,17 @@ async function shutdown() {
   const deadline = Date.now() + 30000;
   while (inFlight > 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 200));
   printSummary(' (final)');
+  for (const id of Object.keys(conns)) { try { conns[id].close(); } catch (_) {} }
   process.exit(0);
 }
 
 async function main() {
   preflight();
-  console.log(`loadgen: TPS≈${(1000 / INTERVAL_MS).toFixed(2)} (interval ${INTERVAL_MS}ms), max-inflight ${MAX_INFLIGHT}` +
+  console.log(`loadgen: ~${(BATCH_SIZE * 1000 / INTERVAL_MS).toFixed(2)} tx/s, burst ${BATCH_SIZE} tx/block every ${INTERVAL_MS}ms, max-inflight ${MAX_INFLIGHT}` +
     (DURATION_SEC ? `, duration ${DURATION_SEC}s` : ', running forever (Ctrl-C to stop)'));
+
+  // One persistent gateway connection per identity (reused for all submits).
+  for (const id of USED_IDENTITIES) conns[id] = openGateway(id);
 
   // Seed a few lots so transfers/certs/recalls have something to act on.
   for (let i = 0; i < SEED_LOTS; i++) await fire(buildCreateLot());
