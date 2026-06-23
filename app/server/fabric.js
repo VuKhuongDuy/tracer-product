@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const grpc = require('@grpc/grpc-js');
 const { connect, signers } = require('@hyperledger/fabric-gateway');
 
-const TN = '/Users/alex/Project/hyperledger-fabric/fabric-samples/test-network';
+const TN = process.env.TEST_NETWORK || path.resolve(__dirname, '../../fabric-samples/test-network');
 const WALLET = path.join(__dirname, 'wallet');
 const CHANNEL = 'mychannel';
 const CHAINCODE = 'produce';
