@@ -12,3 +12,6 @@ export const getBlock = (n) => fetch(`/api/blocks/${n}`).then(j);
 export const getTx = (txid) => fetch(`/api/tx/${encodeURIComponent(txid)}`).then(j);
 export const getTxs = (count = 15) => fetch(`/api/txs?count=${count}`).then(j);
 export const getStats = (count = 20) => fetch(`/api/stats?count=${count}`).then(j);
+export const getStatsOverview = () => fetch('/api/stats/overview').then(j);
+export const getUserTxs = (name, count = 100) => fetch(`/api/users/${encodeURIComponent(name)}/txs?count=${count}`).then(j);
+export const getContractTxs = (name, count = 100) => fetch(`/api/contracts/${encodeURIComponent(name)}/txs?count=${count}`).then(j);

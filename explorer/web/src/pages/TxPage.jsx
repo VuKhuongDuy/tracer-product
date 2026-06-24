@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { getTx } from '../api.js';
 import { fmtTime, ago, StatusBadge, BlockLink, actorLabel, contractLabel, methodLabel } from '../util.jsx';
 
@@ -69,8 +69,18 @@ export default function TxPage() {
 
             <div className="ddivider" />
 
-            <Row label="Từ"><span className="party-lg">{actorLabel(t.from)}</span><Copy text={t.from} /></Row>
-            <Row label="Đến"><span className="party-lg">{contractLabel(t.to)}</span><Copy text={t.to} /></Row>
+            <Row label="Từ">
+              {t.from
+                ? <Link to={`/user/${encodeURIComponent(t.from)}`} className="party-lg party-link">{actorLabel(t.from)}</Link>
+                : <span className="muted">—</span>}
+              <Copy text={t.from} />
+            </Row>
+            <Row label="Đến">
+              {t.to
+                ? <Link to={`/contract/${encodeURIComponent(t.to)}`} className="party-lg party-link">{contractLabel(t.to)}</Link>
+                : <span className="muted">—</span>}
+              <Copy text={t.to} />
+            </Row>
             <Row label="Phương thức">
               {t.method ? <span className="method-chip">{methodLabel(t.method)}</span> : <span className="muted">—</span>}
             </Row>

@@ -33,7 +33,8 @@ export default function BlockPage() {
           {typeof b.confirmations === 'number' && (<><div className="k">Xác nhận</div><div className="v">{b.confirmations}</div></>)}
           <div className="k">Số giao dịch</div><div className="v">{b.txCount}</div>
           <div className="k">Mã băm khối</div><div className="v hash">{b.dataHash}</div>
-          <div className="k">Khối trước</div><div className="v hash">{b.previousHash || '—'}</div>
+          <div className="k">Khối trước</div>
+          <div className="v hash">{n > 0 ? <Link to={`/block/${n - 1}`}>{`#${n - 1}`}</Link> : '—'}</div>
         </div>
       </div>
 

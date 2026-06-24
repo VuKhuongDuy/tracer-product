@@ -96,6 +96,8 @@ tr:hover td { background: #f8f9fb; }
 .drow .dval { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; overflow-wrap: anywhere; font-size: 16px; }
 .ddivider { height: 1px; background: #eef0f5; margin: 8px 0; }
 .party-lg { background: #f1f3f8; border: 1px solid #e2e6ef; border-radius: 6px; padding: 5px 12px; font-size: 15px; font-weight: 500; }
+a.party-link { color: #1f6feb; }
+a.party-link:hover { text-decoration: none; border-color: #1f6feb; background: #eef3ff; }
 @media (max-width: 640px) { .drow { grid-template-columns: 1fr; gap: 4px; } }
 
 /* Chip phương thức cỡ lớn (viền rộng, tự xuống dòng nếu tên dài) */

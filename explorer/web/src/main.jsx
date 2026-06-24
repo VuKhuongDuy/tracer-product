@@ -8,6 +8,8 @@ import BlocksPage from './pages/BlocksPage.jsx';
 import BlockPage from './pages/BlockPage.jsx';
 import TxsPage from './pages/TxsPage.jsx';
 import TxPage from './pages/TxPage.jsx';
+import UserPage from './pages/UserPage.jsx';
+import ContractPage from './pages/ContractPage.jsx';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -19,6 +21,8 @@ createRoot(document.getElementById('root')).render(
           <Route path="/block/:number" element={<BlockPage />} />
           <Route path="/txs" element={<TxsPage />} />
           <Route path="/tx/:txid" element={<TxPage />} />
+          <Route path="/user/:name" element={<UserPage />} />
+          <Route path="/contract/:name" element={<ContractPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

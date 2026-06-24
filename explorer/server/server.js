@@ -44,6 +44,24 @@ const blockMeta = (b) => ({
   txCount: publicTxs(b).length, timestamp: b.timestamp,
 });
 
+// Tổng giao dịch và giao dịch trung bình hằng ngày trên toàn bộ chuỗi.
+app.get('/api/stats/overview', async (req, res) => {
+  try {
+    const height = await chainHeight();
+    let totalTx = 0;
+    let firstTs = null;
+    for (let n = 0; n < height; n++) {
+      const b = await blockSummary(n);
+      const pub = publicTxs(b);
+      totalTx += pub.length;
+      if (!firstTs && pub.length) firstTs = b.timestamp;
+    }
+    const days = firstTs ? (Date.now() - new Date(firstTs).getTime()) / 86400000 : 1;
+    const dailyAvg = days > 0 ? (totalTx / days).toFixed(1) : '0';
+    res.json({ totalTx, dailyAvg: Number(dailyAvg) });
+  } catch (e) { res.status(500).json({ error: `Lỗi tính thống kê tổng quan: ${e.message || e}` }); }
+});
+
 app.get('/api/chain', async (req, res) => {
   try {
     const info = decodeChainInfo(await getChainInfoBytes());
@@ -98,6 +116,44 @@ app.get('/api/txs', async (req, res) => {
     }
     res.json(txs.slice(0, count));
   } catch (e) { res.status(500).json({ error: `Lỗi đọc giao dịch: ${e.message || e}` }); }
+});
+
+// Lịch sử giao dịch của một người dùng (theo tên định danh = CN chứng chỉ người gửi).
+app.get('/api/users/:name/txs', async (req, res) => {
+  const name = (req.params.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Thiếu tên người dùng' });
+  try {
+    const count = Math.min(Number(req.query.count) || 100, 500);
+    const height = await chainHeight();
+    const txs = [];
+    for (let n = height - 1; n >= 0 && txs.length < count; n--) {
+      const b = await blockSummary(n);
+      for (const t of publicTxs(b)) {
+        if (t.from === name) txs.push({ ...t, blockNumber: b.number });
+        if (txs.length >= count) break;
+      }
+    }
+    res.json({ name, count: txs.length, txs });
+  } catch (e) { res.status(500).json({ error: `Lỗi đọc lịch sử người dùng: ${e.message || e}` }); }
+});
+
+// Lịch sử giao dịch của một hợp đồng thông minh (theo tên contract = đích đến).
+app.get('/api/contracts/:name/txs', async (req, res) => {
+  const name = (req.params.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Thiếu tên hợp đồng' });
+  try {
+    const count = Math.min(Number(req.query.count) || 100, 500);
+    const height = await chainHeight();
+    const txs = [];
+    for (let n = height - 1; n >= 0 && txs.length < count; n--) {
+      const b = await blockSummary(n);
+      for (const t of publicTxs(b)) {
+        if (t.to === name) txs.push({ ...t, blockNumber: b.number });
+        if (txs.length >= count) break;
+      }
+    }
+    res.json({ name, count: txs.length, txs });
+  } catch (e) { res.status(500).json({ error: `Lỗi đọc lịch sử hợp đồng: ${e.message || e}` }); }
 });
 
 app.get('/api/stats', async (req, res) => {

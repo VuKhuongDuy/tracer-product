@@ -13,7 +13,7 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     try {
       const [chain, stats, blocks, txs] = await Promise.all([
-        getChain(), getStats(20), getBlocks(8), getTxs(8),
+        getChain(), getStats(20), getBlocks(15), getTxs(8),
       ]);
       setData({ chain, stats, blocks, txs });
       setErr('');
@@ -40,10 +40,10 @@ export default function Dashboard() {
         <div className="stat"><div className="label">TB giao dịch / khối</div><div className="value">{avg}</div></div>
       </div>
 
-      <div className="panel">
+      {/* <div className="panel">
         <h3>Số giao dịch theo khối (20 khối gần nhất)</h3>
         <TxChart data={stats.perBlock} />
-      </div>
+      </div> */}
 
       <div className="two-col">
         <div className="panel">
