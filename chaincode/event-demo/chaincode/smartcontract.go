@@ -32,6 +32,13 @@ type Event struct {
 	TxID      string `json:"txId"`      // transaction that wrote this event
 }
 
+// PaginatedEvents wraps one page of events plus the bookmark for the next page.
+type PaginatedEvents struct {
+	Events   []*Event `json:"events"`
+	Bookmark string   `json:"bookmark"`
+	Count    int32    `json:"count"`
+}
+
 // SaveEvent stores a new event for the given user.
 //
 // The on-ledger key is a composite key (event~userID~eventID) so that every
@@ -81,15 +88,52 @@ func (s *SmartContract) SaveEvent(ctx contractapi.TransactionContextInterface,
 	return &event, nil
 }
 
-// GetEvent returns every event stored for the given user, ordered by eventID.
+// GetEventByID returns the single event identified by userID and eventID.
+func (s *SmartContract) GetEventByID(ctx contractapi.TransactionContextInterface,
+	userID, eventID string) (*Event, error) {
+
+	if userID == "" || eventID == "" {
+		return nil, fmt.Errorf("userID and eventID are required")
+	}
+
+	key, err := ctx.GetStub().CreateCompositeKey(eventIndex, []string{userID, eventID})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build composite key: %w", err)
+	}
+
+	data, err := ctx.GetStub().GetState(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read state: %w", err)
+	}
+	if data == nil {
+		return nil, fmt.Errorf("event %s not found for user %s", eventID, userID)
+	}
+
+	var event Event
+	if err := json.Unmarshal(data, &event); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal event: %w", err)
+	}
+	return &event, nil
+}
+
+// GetEvent returns a paginated list of events for the given user, ordered by eventID.
+//
+// pageSize controls how many records to fetch per call (use 0 for no limit).
+// bookmark is the cursor returned by the previous call; pass "" for the first page.
+// The returned PaginatedEvents.Bookmark is the cursor for the next page (empty when done).
 func (s *SmartContract) GetEvent(ctx contractapi.TransactionContextInterface,
-	userID string) ([]*Event, error) {
+	userID string, pageSize int32, bookmark string) (*PaginatedEvents, error) {
 
 	if userID == "" {
 		return nil, fmt.Errorf("userID is required")
 	}
 
-	iterator, err := ctx.GetStub().GetStateByPartialCompositeKey(eventIndex, []string{userID})
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	iterator, metadata, err := ctx.GetStub().GetStateByPartialCompositeKeyWithPagination(
+		eventIndex, []string{userID}, pageSize, bookmark,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query events: %w", err)
 	}
@@ -103,9 +147,14 @@ func (s *SmartContract) GetEvent(ctx contractapi.TransactionContextInterface,
 		}
 		var event Event
 		if err := json.Unmarshal(item.Value, &event); err != nil {
-			continue // skip anything that is not an event
+			continue // skip anything that is not a valid event record
 		}
 		events = append(events, &event)
 	}
-	return events, nil
+
+	return &PaginatedEvents{
+		Events:   events,
+		Bookmark: metadata.Bookmark,
+		Count:    metadata.FetchedRecordsCount,
+	}, nil
 }
